@@ -6,6 +6,7 @@ import { addExcludedBeta, getExcludedBetas, getModelBetas, getNextBetaToExclude,
 import { transformBody, transformResponseStream } from "./transforms.js";
 import { applyOpencodeConfig } from "./plugin-config.js";
 import { getCachedCredentials, getCredentialsForSync, syncAuthJson, initAccounts, setActiveAccountSource, loadPersistedAccountSource, saveAccountSource, refreshAccountsList, } from "./credentials.js";
+import { buildAuthorizationUrl, exchangeCode, refreshTokens } from "./oauth.js";
 export { addExcludedBeta, getExcludedBetas, getModelBetas, getNextBetaToExclude, isLongContextError, LONG_CONTEXT_BETAS, } from "./betas.js";
 export { resetExcludedBetas } from "./betas.js";
 export { stripToolPrefix, transformBody, transformResponseStream, } from "./transforms.js";
@@ -144,7 +145,7 @@ export function buildRequestHeaders(input, init, accessToken, modelId = "unknown
     return headers;
 }
 const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const plugin = async () => {
+const plugin = async ({ client }) => {
     initLogger();
     let accounts = [];
     try {
@@ -275,21 +276,72 @@ const plugin = async () => {
                             retryAttempt: 0,
                         });
                         // On 401, force a credential refresh and retry once.
-                        // This handles the common case of token expiry mid-session.
+                        // Two refresh paths are attempted in order:
+                        //   1. Refresh via stored OAuth refresh token (if available)
+                        //   2. Re-read credentials from Keychain (in case the user ran
+                        //      `claude` to re-authenticate and a new value is now in
+                        //      the keychain)
+                        // After both fail, the user is instructed to run `opencode auth`
+                        // and pick "Claude OAuth (fallback)" to authorize via OAuth.
                         if (response.status === 401) {
                             log("fetch_401_retry", { modelId });
-                            const refreshed = getCachedCredentials();
-                            if (refreshed && refreshed.accessToken !== latest.accessToken) {
-                                const retryHeaders = buildRequestHeaders(input, requestInit, refreshed.accessToken, modelId, excluded);
-                                response = await fetchWithRetry(requestUrl, {
-                                    ...requestInit,
-                                    body,
-                                    headers: retryHeaders,
-                                });
-                                log("fetch_401_retry_result", {
-                                    status: response.status,
-                                    modelId,
-                                });
+                            // Path 1: OAuth refresh-token flow (only if we have a refresh
+                            // token and the access token we just used was not a raw key
+                            // that already failed).
+                            const currentAuth = await getAuth();
+                            if (currentAuth.type === "oauth" &&
+                                currentAuth.refresh &&
+                                latest.accessToken !== currentAuth.access) {
+                                // Stale oauth: try to refresh.
+                                const refreshed = await refreshTokens(currentAuth.refresh);
+                                if (refreshed.type === "success") {
+                                    await client.auth.set({
+                                        path: { id: "anthropic" },
+                                        body: {
+                                            type: "oauth",
+                                            access: refreshed.access,
+                                            refresh: refreshed.refresh,
+                                            expires: refreshed.expires,
+                                        },
+                                    });
+                                    log("fetch_401_oauth_refreshed", { modelId });
+                                    const retryHeaders = buildRequestHeaders(input, requestInit, refreshed.access, modelId, excluded);
+                                    response = await fetchWithRetry(requestUrl, {
+                                        ...requestInit,
+                                        body,
+                                        headers: retryHeaders,
+                                    });
+                                    log("fetch_401_retry_result", {
+                                        status: response.status,
+                                        modelId,
+                                        path: "oauth_refresh",
+                                    });
+                                }
+                                else {
+                                    log("fetch_401_oauth_refresh_failed", { modelId });
+                                }
+                            }
+                            else {
+                                // Path 2: re-read keychain in case the user re-ran `claude`
+                                // mid-session.
+                                const refreshed = getCachedCredentials();
+                                if (refreshed && refreshed.accessToken !== latest.accessToken) {
+                                    const retryHeaders = buildRequestHeaders(input, requestInit, refreshed.accessToken, modelId, excluded);
+                                    response = await fetchWithRetry(requestUrl, {
+                                        ...requestInit,
+                                        body,
+                                        headers: retryHeaders,
+                                    });
+                                    log("fetch_401_retry_result", {
+                                        status: response.status,
+                                        modelId,
+                                        path: "keychain_reread",
+                                    });
+                                }
+                                else {
+                                    log("fetch_401_no_refresh_available", { modelId });
+                                    console.warn(`opencode-claude-auth: API 401 for ${modelId}. The raw Keychain key was rejected. Run \`opencode auth\` and pick "Claude OAuth (fallback)" to authorize via OAuth.`);
+                                }
                             }
                         }
                         // Check for long-context beta errors and retry with betas excluded
@@ -395,6 +447,40 @@ const plugin = async () => {
                                     access: creds.accessToken,
                                     refresh: creds.refreshToken,
                                     expires: creds.expiresAt,
+                                };
+                            },
+                        };
+                    },
+                },
+                {
+                    type: "oauth",
+                    label: "Claude OAuth (fallback)",
+                    async authorize() {
+                        log("oauth_fallback_authorize_started", {});
+                        const { url, verifier, state, redirectUri } = await buildAuthorizationUrl("console");
+                        return {
+                            url,
+                            instructions: "Open the URL above, authorize with your Claude account, then paste the full callback URL (or just `code#state`) here:",
+                            method: "code",
+                            async callback(code) {
+                                log("oauth_fallback_callback_received", { length: code.length });
+                                const result = await exchangeCode({ code, state: state ?? "" }, verifier, redirectUri, state);
+                                if (result.type === "failed") {
+                                    log("oauth_fallback_exchange_failed", {});
+                                    return {
+                                        type: "failed",
+                                        error: "OAuth code exchange failed. The code may have expired or the state did not match.",
+                                    };
+                                }
+                                log("oauth_fallback_exchange_success", {
+                                    expiresIn: result.expires - Date.now(),
+                                });
+                                return {
+                                    type: "success",
+                                    provider: "anthropic",
+                                    access: result.access,
+                                    refresh: result.refresh,
+                                    expires: result.expires,
                                 };
                             },
                         };

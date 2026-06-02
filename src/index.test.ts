@@ -127,6 +127,8 @@ const SOURCE_FILES = [
   "transforms.ts",
   "credentials.ts",
   "logger.ts",
+  "oauth.ts",
+  "pkce.ts",
 ] as const
 
 async function copySourceFiles(tempDir: string): Promise<void> {
