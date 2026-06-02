@@ -24,7 +24,7 @@ import {
   refreshAccountsList,
   type ClaudeCredentials,
 } from "./credentials.ts"
-import { buildAuthorizationUrl, exchangeCode, refreshTokens } from "./oauth.ts"
+import { buildAuthorizationUrl, exchangeCode, parseCallback, refreshTokens } from "./oauth.ts"
 
 export {
   addExcludedBeta,
@@ -621,8 +621,19 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
               method: "code",
               async callback(code: string) {
                 log("oauth_fallback_callback_received", { length: code.length })
+                const parsed = parseCallback(code)
+                if (!parsed) {
+                  log("oauth_fallback_callback_parse_failed", {
+                    input: code.slice(0, 64),
+                  })
+                  return {
+                    type: "failed" as const,
+                    error:
+                      "Could not extract code and state from input. Paste the full callback URL (e.g. https://platform.claude.com/oauth/code/callback?code=...&state=...) or the `code#state` pair.",
+                  }
+                }
                 const result = await exchangeCode(
-                  { code, state: state ?? "" },
+                  parsed,
                   verifier,
                   redirectUri,
                   state,

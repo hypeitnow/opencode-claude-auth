@@ -6,7 +6,7 @@ import { addExcludedBeta, getExcludedBetas, getModelBetas, getNextBetaToExclude,
 import { transformBody, transformResponseStream } from "./transforms.js";
 import { applyOpencodeConfig } from "./plugin-config.js";
 import { getCachedCredentials, getCredentialsForSync, syncAuthJson, initAccounts, setActiveAccountSource, loadPersistedAccountSource, saveAccountSource, refreshAccountsList, } from "./credentials.js";
-import { buildAuthorizationUrl, exchangeCode, refreshTokens } from "./oauth.js";
+import { buildAuthorizationUrl, exchangeCode, parseCallback, refreshTokens } from "./oauth.js";
 export { addExcludedBeta, getExcludedBetas, getModelBetas, getNextBetaToExclude, isLongContextError, LONG_CONTEXT_BETAS, } from "./betas.js";
 export { resetExcludedBetas } from "./betas.js";
 export { stripToolPrefix, transformBody, transformResponseStream, } from "./transforms.js";
@@ -464,7 +464,17 @@ const plugin = async ({ client }) => {
                             method: "code",
                             async callback(code) {
                                 log("oauth_fallback_callback_received", { length: code.length });
-                                const result = await exchangeCode({ code, state: state ?? "" }, verifier, redirectUri, state);
+                                const parsed = parseCallback(code);
+                                if (!parsed) {
+                                    log("oauth_fallback_callback_parse_failed", {
+                                        input: code.slice(0, 64),
+                                    });
+                                    return {
+                                        type: "failed",
+                                        error: "Could not extract code and state from input. Paste the full callback URL (e.g. https://platform.claude.com/oauth/code/callback?code=...&state=...) or the `code#state` pair.",
+                                    };
+                                }
+                                const result = await exchangeCode(parsed, verifier, redirectUri, state);
                                 if (result.type === "failed") {
                                     log("oauth_fallback_exchange_failed", {});
                                     return {
