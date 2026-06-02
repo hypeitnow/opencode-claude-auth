@@ -118,6 +118,32 @@ function syncToPath(authPath: string, creds: ClaudeCredentials): void {
       }
     }
   }
+
+  // Preserve a real OAuth entry already present in auth.json. The keychain
+  // "Claude Code" service may contain a managed/raw API key that gets
+  // rejected by Anthropic with 401; in that case the user has authorised via
+  // the "Claude OAuth (fallback)" auth method and the resulting {access,
+  // refresh, expires} triple lives in auth.json. Writing the keychain value
+  // back here would clobber those working OAuth tokens on the next sync
+  // interval (or the very next plugin init).
+  const existing = auth.anthropic as
+    | { type?: string; refresh?: string; access?: string }
+    | undefined
+  const hasRealOAuth = !!(
+    existing &&
+    existing.type === "oauth" &&
+    typeof existing.refresh === "string" &&
+    existing.refresh.length > 0
+  )
+  const incomingIsRawKey = !creds.refreshToken
+  if (hasRealOAuth && incomingIsRawKey) {
+    log("sync_auth_json_skipped", {
+      path: authPath,
+      reason: "existing_oauth_preserved",
+    })
+    return
+  }
+
   auth.anthropic = {
     type: "oauth",
     access: creds.accessToken,

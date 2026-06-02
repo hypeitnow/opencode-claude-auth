@@ -583,3 +583,253 @@ describe("parseOAuthResponse", () => {
     assert.equal(parseOAuthResponse("", currentRefresh, now), null)
   })
 })
+
+describe("syncAuthJson preserves real OAuth", () => {
+  it("does not overwrite a real OAuth entry with a raw keychain value", async () => {
+    if (process.platform === "win32") return
+
+    const originalHome = process.env.HOME
+    const tempHome = await mkdtemp(
+      join(tmpdir(), "opencode-claude-auth-preserve-"),
+    )
+    process.env.HOME = tempHome
+
+    try {
+      // Pre-populate auth.json with a real OAuth entry (the result of the
+      // "Claude OAuth (fallback)" auth method).
+      const authDir = join(tempHome, ".local", "share", "opencode")
+      mkdirSync(authDir, { recursive: true })
+      const authPath = join(authDir, "auth.json")
+      const realOauth = {
+        anthropic: {
+          type: "oauth",
+          access: "sk-ant-oat01-real-oauth-access",
+          refresh: "sk-ant-ort01-real-oauth-refresh",
+          expires: Date.now() + 3600_000,
+        },
+      }
+      writeFileSync(authPath, JSON.stringify(realOauth), {
+        encoding: "utf-8",
+        mode: 0o600,
+      })
+
+      // Re-import credentials.ts under a temp HOME so it picks up our path.
+      const tempDir = await mkdtemp(
+        join(tmpdir(), "opencode-claude-auth-preserve-sync-"),
+      )
+      const tempCredentials = join(tempDir, "credentials.ts")
+      const tempKeychain = join(tempDir, "keychain.ts")
+      const tempBetas = join(tempDir, "betas.ts")
+      const tempLogger = join(tempDir, "logger.ts")
+      const sourceCredentials = await readFile(
+        new URL("./credentials.ts", import.meta.url),
+        "utf8",
+      )
+      const rewritten = sourceCredentials.replace(
+        /from\s+["']\.\/(\w+)\.js["']/g,
+        'from "./$1.ts"',
+      )
+
+      await writeFile(
+        tempKeychain,
+        `export function readAllClaudeAccounts() { return [] }
+export function refreshAccount() { return null }
+export function writeBackCredentials() { return true }
+export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account \${i + 1}\`) }`,
+        "utf8",
+      )
+      await writeFile(
+        tempBetas,
+        `export function resetExcludedBetas() {}\n`,
+        "utf8",
+      )
+      await writeFile(
+        tempLogger,
+        `export function log() {}\nexport function initLogger() {}\nexport function closeLogger() {}\n`,
+        "utf8",
+      )
+      await writeFile(tempCredentials, rewritten, "utf8")
+
+      const mod = await import(pathToFileURL(tempCredentials).href)
+
+      // Plugin reads raw key from keychain (no refresh token) — this is the
+      // scenario where the keychain holds a managed `sk-ant-api03-...` key
+      // that the API rejects with 401.
+      mod.syncAuthJson({
+        accessToken: "sk-ant-api03-raw-keychain-value",
+        refreshToken: "",
+        expiresAt: Date.now() + 365 * 24 * 3600_000,
+      })
+
+      // auth.json must still hold the real OAuth entry.
+      const after = JSON.parse(await readFile(authPath, "utf8"))
+      assert.equal(after.anthropic.type, "oauth")
+      assert.equal(after.anthropic.access, "sk-ant-oat01-real-oauth-access")
+      assert.equal(after.anthropic.refresh, "sk-ant-ort01-real-oauth-refresh")
+    } finally {
+      if (typeof originalHome === "string") {
+        process.env.HOME = originalHome
+      } else {
+        delete process.env.HOME
+      }
+    }
+  })
+
+  it("still overwrites when incoming value is a real OAuth refresh", async () => {
+    if (process.platform === "win32") return
+
+    const originalHome = process.env.HOME
+    const tempHome = await mkdtemp(
+      join(tmpdir(), "opencode-claude-auth-overwrite-"),
+    )
+    process.env.HOME = tempHome
+
+    try {
+      const authDir = join(tempHome, ".local", "share", "opencode")
+      mkdirSync(authDir, { recursive: true })
+      const authPath = join(authDir, "auth.json")
+      const realOauth = {
+        anthropic: {
+          type: "oauth",
+          access: "sk-ant-oat01-old",
+          refresh: "sk-ant-ort01-old",
+          expires: Date.now() + 3600_000,
+        },
+      }
+      writeFileSync(authPath, JSON.stringify(realOauth), {
+        encoding: "utf-8",
+        mode: 0o600,
+      })
+
+      const tempDir = await mkdtemp(
+        join(tmpdir(), "opencode-claude-auth-overwrite-sync-"),
+      )
+      const tempCredentials = join(tempDir, "credentials.ts")
+      const tempKeychain = join(tempDir, "keychain.ts")
+      const tempBetas = join(tempDir, "betas.ts")
+      const tempLogger = join(tempDir, "logger.ts")
+      const sourceCredentials = await readFile(
+        new URL("./credentials.ts", import.meta.url),
+        "utf8",
+      )
+      const rewritten = sourceCredentials.replace(
+        /from\s+["']\.\/(\w+)\.js["']/g,
+        'from "./$1.ts"',
+      )
+
+      await writeFile(
+        tempKeychain,
+        `export function readAllClaudeAccounts() { return [] }
+export function refreshAccount() { return null }
+export function writeBackCredentials() { return true }
+export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account \${i + 1}\`) }`,
+        "utf8",
+      )
+      await writeFile(
+        tempBetas,
+        `export function resetExcludedBetas() {}\n`,
+        "utf8",
+      )
+      await writeFile(
+        tempLogger,
+        `export function log() {}\nexport function initLogger() {}\nexport function closeLogger() {}\n`,
+        "utf8",
+      )
+      await writeFile(tempCredentials, rewritten, "utf8")
+
+      const mod = await import(pathToFileURL(tempCredentials).href)
+
+      // Incoming is a real OAuth refresh (new tokens after the 401 handler
+      // called refreshTokens()). Should overwrite.
+      mod.syncAuthJson({
+        accessToken: "sk-ant-oat01-refreshed",
+        refreshToken: "sk-ant-ort01-refreshed",
+        expiresAt: Date.now() + 3600_000,
+      })
+
+      const after = JSON.parse(await readFile(authPath, "utf8"))
+      assert.equal(after.anthropic.access, "sk-ant-oat01-refreshed")
+      assert.equal(after.anthropic.refresh, "sk-ant-ort01-refreshed")
+    } finally {
+      if (typeof originalHome === "string") {
+        process.env.HOME = originalHome
+      } else {
+        delete process.env.HOME
+      }
+    }
+  })
+
+  it("overwrites when auth.json has no anthropic entry yet", async () => {
+    if (process.platform === "win32") return
+
+    const originalHome = process.env.HOME
+    const tempHome = await mkdtemp(
+      join(tmpdir(), "opencode-claude-auth-fresh-"),
+    )
+    process.env.HOME = tempHome
+
+    try {
+      const tempDir = await mkdtemp(
+        join(tmpdir(), "opencode-claude-auth-fresh-sync-"),
+      )
+      const tempCredentials = join(tempDir, "credentials.ts")
+      const tempKeychain = join(tempDir, "keychain.ts")
+      const tempBetas = join(tempDir, "betas.ts")
+      const tempLogger = join(tempDir, "logger.ts")
+      const sourceCredentials = await readFile(
+        new URL("./credentials.ts", import.meta.url),
+        "utf8",
+      )
+      const rewritten = sourceCredentials.replace(
+        /from\s+["']\.\/(\w+)\.js["']/g,
+        'from "./$1.ts"',
+      )
+
+      await writeFile(
+        tempKeychain,
+        `export function readAllClaudeAccounts() { return [] }
+export function refreshAccount() { return null }
+export function writeBackCredentials() { return true }
+export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account \${i + 1}\`) }`,
+        "utf8",
+      )
+      await writeFile(
+        tempBetas,
+        `export function resetExcludedBetas() {}\n`,
+        "utf8",
+      )
+      await writeFile(
+        tempLogger,
+        `export function log() {}\nexport function initLogger() {}\nexport function closeLogger() {}\n`,
+        "utf8",
+      )
+      await writeFile(tempCredentials, rewritten, "utf8")
+
+      const mod = await import(pathToFileURL(tempCredentials).href)
+
+      // First write: no existing entry, no refresh token. Should write.
+      mod.syncAuthJson({
+        accessToken: "sk-ant-api03-raw",
+        refreshToken: "",
+        expiresAt: Date.now() + 365 * 24 * 3600_000,
+      })
+
+      const authPath = join(
+        tempHome,
+        ".local",
+        "share",
+        "opencode",
+        "auth.json",
+      )
+      const after = JSON.parse(await readFile(authPath, "utf8"))
+      assert.equal(after.anthropic.access, "sk-ant-api03-raw")
+      assert.equal(after.anthropic.refresh, "")
+    } finally {
+      if (typeof originalHome === "string") {
+        process.env.HOME = originalHome
+      } else {
+        delete process.env.HOME
+      }
+    }
+  })
+})

@@ -323,12 +323,38 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
           apiKey: "",
           baseURL: "https://api.anthropic.com/v1",
           async fetch(input: RequestInfo | URL, init?: RequestInit) {
-            const latest = getCachedCredentials()
-            if (!latest) {
-              log("fetch_no_credentials", { modelId: "unknown" })
-              throw new Error(
-                "Claude Code credentials are unavailable or expired. Run `claude` to refresh them.",
-              )
+            // Source of truth order:
+            //   1. auth.json (set by the "Claude OAuth (fallback)" auth method
+            //      or opencode auth login — the real OAuth tokens with refresh)
+            //   2. Keychain "Claude Code" service (raw `sk-ant-api03-...`
+            //      console API key — long-lived but may be rejected with 401
+            //      on org-locked accounts)
+            //
+            // Without this split the plugin's in-memory keychain value would
+            // shadow a freshly-authorised OAuth result on the very next
+            // request.
+            const currentAuth = await getAuth()
+            let bearerToken: string
+            let source: "auth_json_oauth" | "auth_json_raw" | "keychain"
+            if (
+              currentAuth.type === "oauth" &&
+              typeof currentAuth.access === "string" &&
+              currentAuth.access.length > 0
+            ) {
+              bearerToken = currentAuth.access
+              source = currentAuth.refresh
+                ? "auth_json_oauth"
+                : "auth_json_raw"
+            } else {
+              const latest = getCachedCredentials()
+              if (!latest) {
+                log("fetch_no_credentials", { modelId: "unknown" })
+                throw new Error(
+                  "Claude Code credentials are unavailable or expired. Run `claude` to refresh them.",
+                )
+              }
+              bearerToken = latest.accessToken
+              source = "keychain"
             }
 
             const requestInit = init ?? {}
@@ -346,8 +372,8 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
 
             log("fetch_credentials", {
               modelId,
-              accessToken: latest.accessToken,
-              expiresAt: latest.expiresAt,
+              source,
+              accessToken: bearerToken,
             })
 
             // Get excluded betas for this model (from previous failed requests)
@@ -356,7 +382,7 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
             const headers = buildRequestHeaders(
               input,
               requestInit,
-              latest.accessToken,
+              bearerToken,
               modelId,
               excluded,
             )
@@ -390,18 +416,18 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
             // After both fail, the user is instructed to run `opencode auth`
             // and pick "Claude OAuth (fallback)" to authorize via OAuth.
             if (response.status === 401) {
-              log("fetch_401_retry", { modelId })
+              log("fetch_401_retry", { modelId, source })
 
               // Path 1: OAuth refresh-token flow (only if we have a refresh
-              // token and the access token we just used was not a raw key
-              // that already failed).
+              // token and the access token we just used was a real OAuth
+              // token, not a raw keychain value).
               const currentAuth = await getAuth()
               if (
+                source === "auth_json_oauth" &&
                 currentAuth.type === "oauth" &&
-                currentAuth.refresh &&
-                latest.accessToken !== currentAuth.access
+                currentAuth.refresh
               ) {
-                // Stale oauth: try to refresh.
+                // Real OAuth token rejected — try to refresh.
                 const refreshed = await refreshTokens(currentAuth.refresh)
                 if (refreshed.type === "success") {
                   await client.auth.set({
@@ -436,9 +462,9 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
                 }
               } else {
                 // Path 2: re-read keychain in case the user re-ran `claude`
-                // mid-session.
+                // mid-session (raw key path).
                 const refreshed = getCachedCredentials()
-                if (refreshed && refreshed.accessToken !== latest.accessToken) {
+                if (refreshed && refreshed.accessToken !== bearerToken) {
                   const retryHeaders = buildRequestHeaders(
                     input,
                     requestInit,
@@ -496,7 +522,7 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
 
               // Rebuild headers without the excluded beta and retry
               const currentCreds = getCachedCredentials()
-              const retryToken = currentCreds?.accessToken ?? latest.accessToken
+              const retryToken = currentCreds?.accessToken ?? bearerToken
               const newExcluded = getExcludedBetas(modelId)
               const newHeaders = buildRequestHeaders(
                 input,
