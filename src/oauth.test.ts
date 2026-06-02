@@ -96,7 +96,10 @@ describe("exchangeCode", () => {
       "https://platform.claude.com/oauth/code/callback",
       "expected",
     )
-    assert.deepEqual(result, { type: "failed" })
+    assert.deepEqual(result, {
+      type: "failed",
+      reason: "state mismatch: expected expected, got actual",
+    })
   })
 
   test("returns failed on network error", async () => {
