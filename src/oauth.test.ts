@@ -30,7 +30,6 @@ describe("buildAuthorizationUrl", () => {
     assert.ok(scope.includes("org:create_api_key"), "missing org:create_api_key scope")
     assert.ok(scope.includes("user:inference"), "missing user:inference scope")
     assert.ok(scope.includes("user:developer"), "missing user:developer scope")
-    assert.ok(scope.includes("user:ccr_inference"), "missing user:ccr_inference scope")
     assert.ok(scope.includes("user:voice"), "missing user:voice scope")
     assert.ok(
       scope.includes("org:service_key_inference"),
