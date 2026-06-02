@@ -60,7 +60,7 @@
     "lint": "oxlint && oxfmt --check .",
     "lint:fix": "oxlint --fix . && oxfmt --write .",
     "format": "oxfmt --write .",
-    "prepare": "node node_modules/typescript/bin/tsc && cp src/anthropic-prompt.txt dist/",
+    "prepare": "node scripts/build.mjs",
     "prepublishOnly": "pnpm run build && pnpm test"
   },
   "devDependencies": {
