@@ -35,7 +35,6 @@ const OAUTH_SCOPES = [
   "user:file_upload",
   "org:service_key_inference",
   "workspace:developer",
-  "workspace:inference",
 ]
 
 export type AuthorizeMode = keyof typeof AUTHORIZE_URLS

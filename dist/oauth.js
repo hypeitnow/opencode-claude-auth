@@ -33,7 +33,6 @@ const OAUTH_SCOPES = [
     "user:file_upload",
     "org:service_key_inference",
     "workspace:developer",
-    "workspace:inference",
 ];
 function generateState() {
     return crypto.randomUUID().replace(/-/g, "");

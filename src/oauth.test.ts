@@ -36,7 +36,6 @@ describe("buildAuthorizationUrl", () => {
       "missing org:service_key_inference scope",
     )
     assert.ok(scope.includes("workspace:developer"), "missing workspace:developer scope")
-    assert.ok(scope.includes("workspace:inference"), "missing workspace:inference scope")
   })
 
   test("max mode uses claude.ai endpoint", async () => {
