@@ -133,7 +133,7 @@ export async function refreshTokens(refresh) {
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log("oauth_refresh_network_error", { error: message });
-        return { type: "failed" };
+        return { type: "failed", reason: `network error: ${message}` };
     }
     if (!response.ok) {
         const body = await response.text().catch(() => "");
