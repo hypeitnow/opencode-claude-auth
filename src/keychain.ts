@@ -18,13 +18,59 @@ export interface ClaudeAccount {
 }
 
 const PRIMARY_SERVICE = "Claude Code-credentials"
+const RAW_KEY_SERVICE = "Claude Code"
+
+// Long-lived credentials synthesised from a raw `sk-ant-api03-...` API key in the
+// macOS Keychain have no embedded expiry or refresh token. We treat them as
+// valid for 1 year from first read, which matches the observed lifetime of
+// Anthropic-issued console API keys. The token is only rotated by the user
+// re-running `claude` (or manually editing the Keychain entry), so the next
+// keychain read will pick up the new value.
+const RAW_KEY_DEFAULT_TTL_MS = 365 * 24 * 60 * 60 * 1000
+
+function parseRawApiKey(raw: string): ClaudeCredentials | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  if (!trimmed.startsWith("sk-ant-")) return null
+
+  return {
+    accessToken: trimmed,
+    refreshToken: "",
+    expiresAt: Date.now() + RAW_KEY_DEFAULT_TTL_MS,
+  }
+}
 
 function parseCredentials(raw: string): ClaudeCredentials | null {
   let parsed: unknown
+  let parsedAsJson = true
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return null
+    parsedAsJson = false
+    parsed = null
+  }
+
+  // Raw API keys in the `Claude Code` Keychain service are not wrapped in JSON.
+  // They are issued by the Anthropic console and are long-lived (no refresh
+  // token, no expiry). See `parseRawApiKey` for the exact format.
+  if (!parsedAsJson) {
+    const rawKey = parseRawApiKey(raw)
+    if (rawKey) {
+      log("credentials_parsed", {
+        format: "raw_api_key",
+        hasAccessToken: true,
+        hasRefreshToken: false,
+        hasExpiry: true,
+      })
+    } else {
+      log("credentials_parsed", {
+        format: "unrecognised",
+        hasAccessToken: false,
+        hasRefreshToken: false,
+        hasExpiry: false,
+      })
+    }
+    return rawKey
   }
 
   const data = (parsed as { claudeAiOauth?: unknown }).claudeAiOauth ?? parsed
@@ -146,15 +192,29 @@ function listClaudeKeychainServices(): string[] {
     const services: string[] = []
     const seen = new Set<string>()
 
-    const re = /"Claude Code-credentials(?:-[0-9a-f]+)?"/g
-    let m = re.exec(dump)
+    // OAuth credentials live under `Claude Code-credentials` (with optional
+    // hex suffix for multi-account setups). Match exact and suffixed names
+    // only — uppercase hex or word suffixes are intentionally rejected.
+    const oauthRe = /"Claude Code-credentials(?:-[0-9a-f]+)?"/g
+    let m = oauthRe.exec(dump)
     while (m !== null) {
       const svc = m[0].slice(1, -1)
       if (!seen.has(svc)) {
         seen.add(svc)
         services.push(svc)
       }
-      m = re.exec(dump)
+      m = oauthRe.exec(dump)
+    }
+
+    // Raw API keys (e.g. `sk-ant-api03-...`) issued by `claude` live under
+    // the bare `Claude Code` service. Some claude CLI versions also stash
+    // additional metadata here, so we attempt to parse it on the read path.
+    if (!seen.has(RAW_KEY_SERVICE)) {
+      const rawKeyRe = new RegExp(`"${RAW_KEY_SERVICE}"`, "g")
+      if (rawKeyRe.test(dump)) {
+        seen.add(RAW_KEY_SERVICE)
+        services.push(RAW_KEY_SERVICE)
+      }
     }
 
     const ordered: string[] = []
@@ -169,7 +229,7 @@ function listClaudeKeychainServices(): string[] {
       error: "Failed to list keychain services",
       message: err instanceof Error ? err.message : String(err),
     })
-    return [PRIMARY_SERVICE]
+    return [PRIMARY_SERVICE, RAW_KEY_SERVICE]
   }
 }
 
@@ -291,6 +351,17 @@ export function writeBackCredentials(
     accessToken: creds.accessToken,
     refreshToken: creds.refreshToken,
     expiresAt: creds.expiresAt,
+  }
+
+  // The `Claude Code` Keychain service stores a raw `sk-ant-api03-...` API
+  // key, not a JSON OAuth blob. There is no refresh-token rotation to
+  // perform — the user has to regenerate the key out-of-band via `claude` or
+  // the Anthropic console — so writeback is intentionally a no-op for this
+  // source. A future `security add-generic-password` call would silently
+  // overwrite the user's real key with a JSON blob and break auth.
+  if (source === RAW_KEY_SERVICE) {
+    log("writeback_skipped", { source, reason: "raw_api_key" })
+    return false
   }
 
   if (source === "file") {
