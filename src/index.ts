@@ -666,6 +666,9 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
                 )
                 if (result.type === "failed") {
                   log("oauth_fallback_exchange_failed", { reason: result.reason })
+                  console.error(
+                    `opencode-claude-auth: OAuth exchange failed: ${result.reason}`,
+                  )
                   return {
                     type: "failed" as const,
                     error: `OAuth code exchange failed: ${result.reason}. The code may have expired (single-use, ~30s lifetime) or the state did not match.`,
