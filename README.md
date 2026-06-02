@@ -12,6 +12,20 @@ The plugin registers its own auth provider with a custom fetch handler that inte
 
 It also syncs credentials to OpenCode's `auth.json` as a fallback (on Windows, it writes to both `%USERPROFILE%\.local\share\opencode\auth.json` and `%LOCALAPPDATA%\opencode\auth.json` to cover all installation methods). If a token is near expiry, it refreshes directly via Anthropic's OAuth endpoint (zero LLM tokens consumed), falling back to the Claude CLI if the direct refresh fails. Background re-sync runs every 5 minutes.
 
+### Raw `Claude Code` Keychain entry
+
+On macOS, the `claude` CLI stores the raw `sk-ant-api03-...` Anthropic console API key in a Keychain service called `Claude Code` (no `-credentials` suffix). The plugin reads this directly and synthesises a 1-year-TTL credential — no JSON envelope, no refresh token. If the raw key is rejected by Anthropic's API (e.g. on org-locked accounts where the only available auth is OAuth), the 401 handler falls back to the **Claude OAuth (fallback)** method described below.
+
+### OAuth fallback (`Claude OAuth (fallback)` auth method)
+
+If the raw Keychain key returns 401, the plugin prints:
+
+> `opencode-claude-auth: API 401 for <model>. The raw Keychain key was rejected. Run \`opencode auth\` and pick "Claude OAuth (fallback)" to authorize via OAuth.`
+
+To authorize, run `opencode auth login` and select **Claude OAuth (fallback)**. The plugin opens `https://platform.claude.com/oauth/authorize` with the `org:create_api_key`, `user:inference`, `user:sessions:claude_code`, and other scopes. Authorize in the browser, paste the full callback URL (or just the `code#state` pair) into opencode, and the plugin exchanges it for a real `{access, refresh, expires}` token. The token is auto-refreshed on every subsequent request via Anthropic's OAuth endpoint — no LLM tokens consumed.
+
+The flow uses standard OAuth 2.0 + PKCE with `client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e` and `token_url=https://platform.claude.com/v1/oauth/token`. Ported from `ex-machina/opencode-anthropic-auth`.
+
 ## Prerequisites
 
 - Claude Code installed and authenticated (run `claude` at least once)
