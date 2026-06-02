@@ -75,7 +75,7 @@ jobs:
       - run: pnpm test
 
       - name: Publish to npm
-        if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+        if: github.event_name == 'workflow_dispatch' && !inputs.dry-run
         run: pnpm publish --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -87,7 +87,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Dry-run publish
-        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        if: github.event_name == 'workflow_dispatch' && inputs.dry-run
         run: |
           echo "::notice::Dry run — would publish version $(node -p "require('./package.json').version")"
           pnpm publish --access public --provenance --no-git-checks --dry-run
