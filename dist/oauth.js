@@ -98,14 +98,24 @@ export async function exchangeCode(callback, verifier, redirectUri, expectedStat
         let parsedError = null;
         try {
             const json = JSON.parse(body);
-            parsedError = json.error_description ?? json.error ?? null;
+            const stringify = (v) => {
+                if (typeof v === "string")
+                    return v;
+                if (v == null)
+                    return null;
+                if (typeof v === "object")
+                    return JSON.stringify(v);
+                return String(v);
+            };
+            parsedError =
+                stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null;
         }
         catch {
             // body wasn't JSON
         }
         const reason = parsedError
             ? `HTTP ${response.status}: ${parsedError}`
-            : `HTTP ${response.status} (body=${body.slice(0, 300) || "(empty)"})`;
+            : `HTTP ${response.status} (body=${body.slice(0, 500) || "(empty)"})`;
         return { type: "failed", reason };
     }
     const json = (await response.json());
@@ -144,12 +154,22 @@ export async function refreshTokens(refresh) {
         let parsedError = null;
         try {
             const json = JSON.parse(body);
-            parsedError = json.error_description ?? json.error ?? null;
+            const stringify = (v) => {
+                if (typeof v === "string")
+                    return v;
+                if (v == null)
+                    return null;
+                if (typeof v === "object")
+                    return JSON.stringify(v);
+                return String(v);
+            };
+            parsedError =
+                stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null;
         }
         catch { }
         const reason = parsedError
             ? `HTTP ${response.status}: ${parsedError}`
-            : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`;
+            : `HTTP ${response.status} (body=${body.slice(0, 500) || "(empty)"})`;
         return { type: "failed", reason };
     }
     const json = (await response.json());

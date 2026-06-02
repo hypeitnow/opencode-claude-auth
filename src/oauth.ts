@@ -113,14 +113,25 @@ export async function exchangeCode(
     log("oauth_exchange_failed", { status: response.status, body })
     let parsedError: string | null = null
     try {
-      const json = JSON.parse(body) as { error?: string; error_description?: string }
-      parsedError = json.error_description ?? json.error ?? null
+      const json = JSON.parse(body) as {
+        error?: unknown
+        error_description?: unknown
+        message?: unknown
+      }
+      const stringify = (v: unknown): string | null => {
+        if (typeof v === "string") return v
+        if (v == null) return null
+        if (typeof v === "object") return JSON.stringify(v)
+        return String(v)
+      }
+      parsedError =
+        stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null
     } catch {
       // body wasn't JSON
     }
     const reason = parsedError
       ? `HTTP ${response.status}: ${parsedError}`
-      : `HTTP ${response.status} (body=${body.slice(0, 300) || "(empty)"})`
+      : `HTTP ${response.status} (body=${body.slice(0, 500) || "(empty)"})`
     return { type: "failed", reason }
   }
   const json = (await response.json()) as {
@@ -162,12 +173,23 @@ export async function refreshTokens(refresh: string): Promise<AuthResult> {
     log("oauth_refresh_failed", { status: response.status, body })
     let parsedError: string | null = null
     try {
-      const json = JSON.parse(body) as { error?: string; error_description?: string }
-      parsedError = json.error_description ?? json.error ?? null
+      const json = JSON.parse(body) as {
+        error?: unknown
+        error_description?: unknown
+        message?: unknown
+      }
+      const stringify = (v: unknown): string | null => {
+        if (typeof v === "string") return v
+        if (v == null) return null
+        if (typeof v === "object") return JSON.stringify(v)
+        return String(v)
+      }
+      parsedError =
+        stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null
     } catch {}
     const reason = parsedError
       ? `HTTP ${response.status}: ${parsedError}`
-      : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`
+      : `HTTP ${response.status} (body=${body.slice(0, 500) || "(empty)"})`
     return { type: "failed", reason }
   }
   const json = (await response.json()) as {
