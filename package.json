@@ -14,9 +14,6 @@
     "type": "git",
     "url": "git+https://github.com/hypeitnow/opencode-claude-auth.git"
   },
-  "publishConfig": {
-    "access": "public"
-  },
   "files": [
     "opencode-claude-auth.js",
     "dist",
@@ -51,6 +48,9 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc && cp src/anthropic-prompt.txt dist/",

@@ -1,0 +1,22 @@
+# CODEOWNERS — code review assignments for hypeitnow/opencode-claude-auth
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+*                       @hypeitnow
+
+# CI/CD requires extra scrutiny
+/.github/               @hypeitnow
+/.github/workflows/     @hypeitnow
+/release-please-config.json    @hypeitnow
+/.release-please-manifest.json @hypeitnow
+
+# Security-sensitive — auth, keychain, credentials
+/src/credentials.ts     @hypeitnow
+/src/keychain.ts        @hypeitnow
+/src/oauth.ts           @hypeitnow
+/src/signing.ts         @hypeitnow
+
+# Release artifacts
+/dist/                  @hypeitnow
+/package.json           @hypeitnow
+/CHANGELOG.md           @hypeitnow

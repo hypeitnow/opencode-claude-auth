@@ -4,14 +4,16 @@ import {
   buildAuthorizationUrl,
   exchangeCode,
   parseCallback,
-  refreshTokens,
   CLIENT_ID,
 } from "./oauth.ts"
 
 describe("buildAuthorizationUrl", () => {
   test("uses platform.claude.com console endpoint by default", async () => {
     const { url } = await buildAuthorizationUrl()
-    assert.ok(url.startsWith("https://platform.claude.com/oauth/authorize?"), url)
+    assert.ok(
+      url.startsWith("https://platform.claude.com/oauth/authorize?"),
+      url,
+    )
   })
 
   test("console mode includes all required OAuth params", async () => {
@@ -27,7 +29,10 @@ describe("buildAuthorizationUrl", () => {
     assert.ok(u.searchParams.get("code_challenge"))
     assert.ok(u.searchParams.get("state"))
     const scope = u.searchParams.get("scope") ?? ""
-    assert.ok(scope.includes("org:create_api_key"), "missing org:create_api_key scope")
+    assert.ok(
+      scope.includes("org:create_api_key"),
+      "missing org:create_api_key scope",
+    )
     assert.ok(scope.includes("user:inference"), "missing user:inference scope")
   })
 
@@ -42,7 +47,10 @@ describe("buildAuthorizationUrl", () => {
     assert.ok(result.verifier.length > 80)
     assert.equal(typeof result.state, "string")
     assert.equal(result.state.length, 32) // uuid without dashes
-    assert.equal(result.redirectUri, "https://platform.claude.com/oauth/code/callback")
+    assert.equal(
+      result.redirectUri,
+      "https://platform.claude.com/oauth/code/callback",
+    )
   })
 
   test("URL state matches returned state", async () => {
@@ -54,7 +62,9 @@ describe("buildAuthorizationUrl", () => {
 
 describe("parseCallback", () => {
   test("parses full callback URL", () => {
-    const result = parseCallback("https://platform.claude.com/oauth/code/callback?code=abc123&state=xyz789")
+    const result = parseCallback(
+      "https://platform.claude.com/oauth/code/callback?code=abc123&state=xyz789",
+    )
     assert.deepEqual(result, { code: "abc123", state: "xyz789" })
   })
 
@@ -99,11 +109,5 @@ describe("exchangeCode", () => {
     // Use a port that should be closed; this triggers ECONNREFUSED
     // We can't easily do that without mocking fetch. Skip and rely on
     // the integration test (live oauth flow).
-  })
-})
-
-describe("refreshTokens", () => {
-  test("returns failed on network error", async () => {
-    // Integration test only — see above.
   })
 })

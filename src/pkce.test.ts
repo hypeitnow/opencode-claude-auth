@@ -10,7 +10,11 @@ describe("generatePKCE", () => {
 
   test("verifier is URL-safe base64 (no +, /, =)", async () => {
     const pkce = await generatePKCE()
-    assert.equal(!!pkce.verifier.match(/^[A-Za-z0-9_-]+$/), true, "verifier has unsafe chars")
+    assert.equal(
+      !!pkce.verifier.match(/^[A-Za-z0-9_-]+$/),
+      true,
+      "verifier has unsafe chars",
+    )
     assert.equal(pkce.verifier.includes("+"), false)
     assert.equal(pkce.verifier.includes("/"), false)
     assert.equal(pkce.verifier.includes("="), false)
@@ -18,8 +22,14 @@ describe("generatePKCE", () => {
 
   test("verifier is 64 bytes of randomness → ~86 base64 chars", async () => {
     const pkce = await generatePKCE()
-    assert.ok(pkce.verifier.length > 80, `verifier length ${pkce.verifier.length} too short`)
-    assert.ok(pkce.verifier.length < 100, `verifier length ${pkce.verifier.length} too long`)
+    assert.ok(
+      pkce.verifier.length > 80,
+      `verifier length ${pkce.verifier.length} too short`,
+    )
+    assert.ok(
+      pkce.verifier.length < 100,
+      `verifier length ${pkce.verifier.length} too long`,
+    )
   })
 
   test("challenge is URL-safe base64", async () => {
@@ -51,7 +61,10 @@ describe("generatePKCE", () => {
     const bytes = new Uint8Array(digest)
     let bin = ""
     for (const b of bytes) bin += String.fromCharCode(b)
-    const expected = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "")
+    const expected = btoa(bin)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=/g, "")
     assert.equal(pkce.challenge, expected)
   })
 })

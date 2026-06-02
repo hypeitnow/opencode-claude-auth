@@ -1,9 +1,27 @@
 name: Release
 
+# Two release paths:
+#   1. Automatic: release-please opens a PR on every push to main with
+#      version bump + CHANGELOG update. Merging the PR creates a GitHub
+#      release and the tag push below publishes to npm.
+#   2. Manual: workflow_dispatch lets you re-publish a specific version
+#      (e.g. for 1.6.x hotfixes) without going through release-please.
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "NPM version to publish (must already exist in package.json). Leave empty to publish the version in package.json."
+        required: false
+        type: string
+      dry-run:
+        description: "Dry run (skip actual publish)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -12,7 +30,9 @@ permissions:
   id-token: write
 
 jobs:
-  release:
+  release-please:
+    # Only run release-please on push to main (not on PRs or manual dispatch).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,24 +43,66 @@ jobs:
         id: release-please
         with:
           release-type: node
+          config-file: release-please-config.json
+
+      - name: Log release-please output
+        if: steps.release-please.outputs.releases_created
+        run: |
+          echo "Releases created: ${{ steps.release-please.outputs.releases_created }}"
+          echo "Tag: ${{ steps.release-please.outputs.tag_name }}"
+          echo "Release URL: ${{ steps.release-please.outputs.html_url }}"
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    needs: release-please
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
-        if: steps.release-please.outputs.releases_created == 'true'
 
       - uses: actions/setup-node@v4
-        if: steps.release-please.outputs.releases_created == 'true'
         with:
           node-version: "22"
-          cache: "pnpm"
+          cache: pnpm
           registry-url: "https://registry.npmjs.org"
 
       - run: pnpm install --frozen-lockfile
-        if: steps.release-please.outputs.releases_created == 'true'
 
       - run: pnpm run build
-        if: steps.release-please.outputs.releases_created == 'true'
 
-      - run: pnpm publish --access public --provenance --no-git-checks
-        if: steps.release-please.outputs.releases_created == 'true'
+      - run: pnpm test
+
+      - name: Publish to npm
+        if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+        run: pnpm publish --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm (tag trigger)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: pnpm publish --access public --provenance --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Dry-run publish
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: |
+          echo "::notice::Dry run — would publish version $(node -p "require('./package.json').version")"
+          pnpm publish --access public --provenance --no-git-checks --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.js
+            dist/*.d.ts
+            opencode-claude-auth.js
+            installation.md
+            LICENSE

@@ -47,7 +47,9 @@ function generateState(): string {
   return crypto.randomUUID().replace(/-/g, "")
 }
 
-function parseCallbackInput(input: string): { code: string; state: string } | null {
+function parseCallbackInput(
+  input: string,
+): { code: string; state: string } | null {
   const trimmed = input.trim()
   try {
     const url = new URL(trimmed)
@@ -75,7 +77,10 @@ export async function exchangeCode(
   expectedState?: string,
 ): Promise<AuthResult> {
   if (expectedState && callback.state !== expectedState) {
-    log("oauth_state_mismatch", { expected: expectedState, got: callback.state })
+    log("oauth_state_mismatch", {
+      expected: expectedState,
+      got: callback.state,
+    })
     return {
       type: "failed",
       reason: `state mismatch: expected ${expectedState}, got ${callback.state}`,
@@ -121,7 +126,10 @@ export async function exchangeCode(
         return String(v)
       }
       parsedError =
-        stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null
+        stringify(json.error_description) ??
+        stringify(json.error) ??
+        stringify(json.message) ??
+        null
     } catch {
       // body wasn't JSON
     }
@@ -181,7 +189,10 @@ export async function refreshTokens(refresh: string): Promise<AuthResult> {
         return String(v)
       }
       parsedError =
-        stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null
+        stringify(json.error_description) ??
+        stringify(json.error) ??
+        stringify(json.message) ??
+        null
     } catch {}
     const reason = parsedError
       ? `HTTP ${response.status}: ${parsedError}`
@@ -203,7 +214,12 @@ export async function refreshTokens(refresh: string): Promise<AuthResult> {
 
 export async function buildAuthorizationUrl(
   mode: AuthorizeMode = "console",
-): Promise<{ url: string; verifier: string; state: string; redirectUri: string }> {
+): Promise<{
+  url: string
+  verifier: string
+  state: string
+  redirectUri: string
+}> {
   const pkce = await generatePKCE()
   const state = generateState()
   const url = new URL(AUTHORIZE_URLS[mode])
@@ -223,6 +239,8 @@ export async function buildAuthorizationUrl(
   }
 }
 
-export function parseCallback(input: string): { code: string; state: string } | null {
+export function parseCallback(
+  input: string,
+): { code: string; state: string } | null {
   return parseCallbackInput(input)
 }

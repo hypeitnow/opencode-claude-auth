@@ -58,7 +58,10 @@ function parseCallbackInput(input) {
 }
 export async function exchangeCode(callback, verifier, redirectUri, expectedState) {
     if (expectedState && callback.state !== expectedState) {
-        log("oauth_state_mismatch", { expected: expectedState, got: callback.state });
+        log("oauth_state_mismatch", {
+            expected: expectedState,
+            got: callback.state,
+        });
         return {
             type: "failed",
             reason: `state mismatch: expected ${expectedState}, got ${callback.state}`,
@@ -104,7 +107,10 @@ export async function exchangeCode(callback, verifier, redirectUri, expectedStat
                 return String(v);
             };
             parsedError =
-                stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null;
+                stringify(json.error_description) ??
+                    stringify(json.error) ??
+                    stringify(json.message) ??
+                    null;
         }
         catch {
             // body wasn't JSON
@@ -160,7 +166,10 @@ export async function refreshTokens(refresh) {
                 return String(v);
             };
             parsedError =
-                stringify(json.error_description) ?? stringify(json.error) ?? stringify(json.message) ?? null;
+                stringify(json.error_description) ??
+                    stringify(json.error) ??
+                    stringify(json.message) ??
+                    null;
         }
         catch { }
         const reason = parsedError

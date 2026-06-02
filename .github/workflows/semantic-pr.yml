@@ -1,7 +1,13 @@
 name: Semantic PR
 
+# Validates that PR titles follow Conventional Commits.
+# Uses `pull_request` (read-only) — safe for forks. Do NOT switch to
+# `pull_request_target` here: this repo accepts PRs from forks, and
+# `pull_request_target` would execute the workflow with write access
+# against untrusted fork code.
+
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited]
 
 permissions:

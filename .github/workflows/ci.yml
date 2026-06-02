@@ -2,13 +2,19 @@ name: CI
 
 on:
   pull_request:
+    branches: [main]
   push:
-    branches:
-      - main
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
+    name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -17,14 +23,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "pnpm"
+          cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm run lint
 
   build:
+    name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -33,14 +41,32 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "pnpm"
+          cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm run build
 
+      - name: Verify dist/ is committed
+        run: |
+          if [ -z "$(git status --porcelain dist/ | grep '^??')" ]; then
+            echo "dist/ is committed — OK"
+          else
+            echo "dist/ has uncommitted files. The plugin is shipped with pre-built dist/."
+            git status --porcelain dist/
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+
   test:
+    name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -49,7 +75,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: "pnpm"
+          cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 

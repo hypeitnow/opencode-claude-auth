@@ -1,0 +1,17 @@
+{
+  "release-type": "node",
+  "package-name": "@hypeitnow/opencode-claude-auth",
+  "include-v-in-tag": true,
+  "version": "1.6.14",
+  "last-release-sha": "",
+  "changelog-path": "CHANGELOG.md",
+  "pull-request-header": "🤖 Release ${version}",
+  "pull-request-footer": ":robot: This PR was created by [release-please](https://github.com/googleapis/release-please).",
+  "extra-files": ["src/anthropic-prompt.txt"],
+  "packages": {
+    ".": {
+      "package-name": "@hypeitnow/opencode-claude-auth",
+      "component": "@hypeitnow/opencode-claude-auth"
+    }
+  }
+}

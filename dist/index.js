@@ -6,7 +6,7 @@ import { addExcludedBeta, getExcludedBetas, getModelBetas, getNextBetaToExclude,
 import { transformBody, transformResponseStream } from "./transforms.js";
 import { applyOpencodeConfig } from "./plugin-config.js";
 import { getCachedCredentials, getCredentialsForSync, syncAuthJson, initAccounts, setActiveAccountSource, loadPersistedAccountSource, saveAccountSource, refreshAccountsList, } from "./credentials.js";
-import { buildAuthorizationUrl, exchangeCode, parseCallback, refreshTokens } from "./oauth.js";
+import { buildAuthorizationUrl, exchangeCode, parseCallback, refreshTokens, } from "./oauth.js";
 export { addExcludedBeta, getExcludedBetas, getModelBetas, getNextBetaToExclude, isLongContextError, LONG_CONTEXT_BETAS, } from "./betas.js";
 export { resetExcludedBetas } from "./betas.js";
 export { stripToolPrefix, transformBody, transformResponseStream, } from "./transforms.js";
@@ -271,9 +271,7 @@ const plugin = async ({ client }) => {
                             typeof currentAuth.access === "string" &&
                             currentAuth.access.length > 0) {
                             bearerToken = currentAuth.access;
-                            source = currentAuth.refresh
-                                ? "auth_json_oauth"
-                                : "auth_json_raw";
+                            source = currentAuth.refresh ? "auth_json_oauth" : "auth_json_raw";
                         }
                         else {
                             const latest = getCachedCredentials();
@@ -335,12 +333,12 @@ const plugin = async ({ client }) => {
                             // Path 1: OAuth refresh-token flow (only if we have a refresh
                             // token and the access token we just used was a real OAuth
                             // token, not a raw keychain value).
-                            const currentAuth = await getAuth();
+                            const freshAuth = await getAuth();
                             if (source === "auth_json_oauth" &&
-                                currentAuth.type === "oauth" &&
-                                currentAuth.refresh) {
+                                freshAuth.type === "oauth" &&
+                                freshAuth.refresh) {
                                 // Real OAuth token rejected — try to refresh.
-                                const refreshed = await refreshTokens(currentAuth.refresh);
+                                const refreshed = await refreshTokens(freshAuth.refresh);
                                 if (refreshed.type === "success") {
                                     await client.auth.set({
                                         path: { id: "anthropic" },
@@ -523,7 +521,9 @@ const plugin = async ({ client }) => {
                                 }
                                 const result = await exchangeCode(parsed, verifier, redirectUri, state);
                                 if (result.type === "failed") {
-                                    log("oauth_fallback_exchange_failed", { reason: result.reason });
+                                    log("oauth_fallback_exchange_failed", {
+                                        reason: result.reason,
+                                    });
                                     console.error(`opencode-claude-auth: OAuth exchange failed: ${result.reason}`);
                                     return {
                                         type: "failed",
