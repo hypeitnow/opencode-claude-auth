@@ -1,8 +1,11 @@
 node_modules/
 .pnpm-store/
-dist/
 .env
 *.env.local
 .sisyphus/
 .opencode/
 docs/
+# Keep dist/ tracked so GitHub installs (bun add github:user/repo) have a
+# pre-built copy. devDeps are skipped during install, so tsc wouldn't run.
+# Override local build by running `npm run build`.
+!dist/
