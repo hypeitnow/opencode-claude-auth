@@ -79,7 +79,9 @@ Just run OpenCode. The plugin handles auth automatically — it reads your Claud
 
 The plugin checks these in order:
 
-1. macOS Keychain (all `Claude Code-credentials*` entries — multiple accounts are detected automatically)
+1. macOS Keychain
+   - All `Claude Code-credentials*` entries — multiple accounts are detected automatically
+   - The bare `Claude Code` service — holds raw `sk-ant-api03-...` API keys for users whose `claude` CLI is configured with an Anthropic console API key rather than an OAuth subscription. The key is treated as a long-lived credential (1-year TTL) and never written back to the Keychain, since it would be silently overwritten with a JSON blob otherwise.
 2. `~/.claude/.credentials.json` (fallback, works on all platforms)
 
 ## Multiple accounts (macOS)

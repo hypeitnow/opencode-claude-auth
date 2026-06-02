@@ -12,13 +12,26 @@ import {
 import { chmodSync, statSync } from "node:fs"
 import { mkdtemp } from "node:fs/promises"
 
-// Mirrors the parseCredentials logic from keychain.ts for unit testing
+const RAW_KEY_TTL_MS = 365 * 24 * 60 * 60 * 1000
+
+// Mirrors the parseCredentials + parseRawApiKey logic from keychain.ts for
+// unit testing. The raw-key fallback (Claude Code service) is exercised in
+// the same suite so behaviour stays in lockstep with production.
 function parseCredentials(raw: string): {
   accessToken: string
   refreshToken: string
   expiresAt: number
   subscriptionType?: string
 } | null {
+  const trimmed = raw.trim()
+  if (trimmed.startsWith("sk-ant-")) {
+    return {
+      accessToken: trimmed,
+      refreshToken: "",
+      expiresAt: Date.now() + RAW_KEY_TTL_MS,
+    }
+  }
+
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
@@ -61,6 +74,7 @@ function parseCredentials(raw: string): {
 // Mirrors listClaudeKeychainServices regex logic for unit testing
 function extractServicesFromDump(output: string): string[] {
   const PRIMARY = "Claude Code-credentials"
+  const RAW_KEY = "Claude Code"
   const services: string[] = []
   const seen = new Set<string>()
 
@@ -73,6 +87,14 @@ function extractServicesFromDump(output: string): string[] {
       services.push(svc)
     }
     m = re.exec(output)
+  }
+
+  if (!seen.has(RAW_KEY)) {
+    const rawKeyRe = new RegExp(`"${RAW_KEY}"`, "g")
+    if (rawKeyRe.test(output)) {
+      seen.add(RAW_KEY)
+      services.push(RAW_KEY)
+    }
   }
 
   const ordered: string[] = []
@@ -299,6 +321,89 @@ attributes:
     const services = extractServicesFromDump(dump)
     assert.equal(services.length, 5)
     assert.equal(services[0], "Claude Code-credentials")
+  })
+
+  it("discovers the bare 'Claude Code' service (raw API key storage)", () => {
+    const dump = `
+    "svce"<blob>="Claude Code"
+    "svce"<blob>="Claude Code-credentials"
+    `
+    const services = extractServicesFromDump(dump)
+    assert.ok(services.includes("Claude Code"))
+    assert.ok(services.includes("Claude Code-credentials"))
+  })
+
+  it("discovers 'Claude Code' even when no OAuth credentials entry exists", () => {
+    const dump = `
+    "svce"<blob>="Claude Code"
+    `
+    const services = extractServicesFromDump(dump)
+    assert.deepEqual(services, ["Claude Code"])
+  })
+
+  it("does not confuse 'Claude Code' with 'Claude Code-credentials'", () => {
+    const dump = `
+    "svce"<blob>="Claude Code-credentials"
+    `
+    const services = extractServicesFromDump(dump)
+    assert.deepEqual(services, ["Claude Code-credentials"])
+    assert.ok(!services.includes("Claude Code"))
+  })
+})
+
+describe("raw API key parsing (Claude Code service)", () => {
+  it("parses a sk-ant-api03 key into a long-lived credential", () => {
+    const raw = "sk-ant-api03-1R3Y_lxg2vmDNaKeqL_6jTHKd_svbvbLopsUpWqxZ"
+    const result = parseCredentials(raw)
+    assert.ok(result)
+    assert.equal(result.accessToken, raw)
+    assert.equal(result.refreshToken, "")
+    assert.ok(
+      result.expiresAt > Date.now() + RAW_KEY_TTL_MS - 5_000,
+      "expiresAt should be ~1 year in the future",
+    )
+    assert.ok(
+      result.expiresAt < Date.now() + RAW_KEY_TTL_MS + 5_000,
+      "expiresAt should be ~1 year in the future",
+    )
+    assert.equal(result.subscriptionType, undefined)
+  })
+
+  it("trims surrounding whitespace from a raw key", () => {
+    const raw = "  \nsk-ant-api03-abc123\n  "
+    const result = parseCredentials(raw)
+    assert.ok(result)
+    assert.equal(result.accessToken, "sk-ant-api03-abc123")
+  })
+
+  it("returns null for non-sk-ant strings (refuses to fabricate credentials)", () => {
+    assert.equal(parseCredentials("hello world"), null)
+    assert.equal(parseCredentials("Bearer sk-ant-abc"), null)
+    assert.equal(parseCredentials(""), null)
+  })
+
+  it("returns null for an MCP-only OAuth JSON blob (parses as JSON, no raw-key fallback)", () => {
+    const raw = JSON.stringify({
+      mcpOAuth: {
+        "atlassian|abc": { serverName: "atlassian" },
+      },
+    })
+    assert.equal(parseCredentials(raw), null)
+  })
+
+  it("still parses real OAuth JSON (precedence over raw key fallback)", () => {
+    const raw = JSON.stringify({
+      claudeAiOauth: {
+        accessToken: "at",
+        refreshToken: "rt",
+        expiresAt: 1700000000000,
+      },
+    })
+    const result = parseCredentials(raw)
+    assert.ok(result)
+    assert.equal(result.accessToken, "at")
+    assert.equal(result.refreshToken, "rt")
+    assert.equal(result.expiresAt, 1700000000000)
   })
 })
 
@@ -635,5 +740,18 @@ describe("writeBackCredentials (file source)", () => {
       }
       rmSync(tempHome, { recursive: true, force: true })
     }
+  })
+
+  it("returns false (no-op) when source is the raw-key 'Claude Code' service", () => {
+    // The 'Claude Code' service holds a raw `sk-ant-api03-...` string, not a
+    // JSON OAuth blob. A `security add-generic-password -U` call here would
+    // overwrite the user's real key with a JSON envelope and break auth, so
+    // the writeback path is intentionally a no-op for this source.
+    const result = writeBackCredentials("Claude Code", {
+      accessToken: "sk-ant-api03-abc",
+      refreshToken: "",
+      expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+    })
+    assert.equal(result, false)
   })
 })
