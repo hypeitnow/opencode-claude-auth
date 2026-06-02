@@ -1,7 +1,7 @@
 {
-  "name": "opencode-claude-auth",
-  "version": "1.5.4",
-  "description": "OpenCode plugin that uses your Claude Code credentials — no separate login needed.",
+  "name": "@hypeitnow/opencode-claude-auth",
+  "version": "1.6.0",
+  "description": "OpenCode plugin that uses your Claude Code credentials — no separate login needed. Fork with OAuth fallback for org-locked accounts.",
   "keywords": [
     "anthropic",
     "auth",
@@ -12,7 +12,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/griffinmartin/opencode-claude-auth.git"
+    "url": "git+https://github.com/hypeitnow/opencode-claude-auth.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "opencode-claude-auth.js",
