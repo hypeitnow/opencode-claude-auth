@@ -119,21 +119,27 @@ function syncToPath(authPath: string, creds: ClaudeCredentials): void {
     }
   }
 
-  // Preserve a real OAuth entry already present in auth.json. The keychain
-  // "Claude Code" service may contain a managed/raw API key that gets
-  // rejected by Anthropic with 401; in that case the user has authorised via
-  // the "Claude OAuth (fallback)" auth method and the resulting {access,
-  // refresh, expires} triple lives in auth.json. Writing the keychain value
-  // back here would clobber those working OAuth tokens on the next sync
-  // interval (or the very next plugin init).
+  // Preserve any user-managed entry already present in auth.json. The
+  // keychain "Claude Code" service may contain a managed/raw API key
+  // (issued by the `claude` CLI's `claude.ai` login) that is not a real
+  // OAuth token. We must not clobber a working entry the user has set,
+  // whether it's a real OAuth setup (with refresh) or a raw API key they
+  // configured via `opencode auth login` (type: "api"). Otherwise the next
+  // plugin init would silently flip the auth method used by opencode.
   const existing = auth.anthropic as
-    | { type?: string; refresh?: string; access?: string }
+    | { type?: string; refresh?: string; access?: string; key?: string }
     | undefined
   const hasRealOAuth = !!(
     existing &&
     existing.type === "oauth" &&
     typeof existing.refresh === "string" &&
     existing.refresh.length > 0
+  )
+  const hasApiKey = !!(
+    existing &&
+    existing.type === "api" &&
+    typeof existing.key === "string" &&
+    existing.key.length > 0
   )
   const incomingIsRawKey = !creds.refreshToken
   if (hasRealOAuth && incomingIsRawKey) {
@@ -143,12 +149,31 @@ function syncToPath(authPath: string, creds: ClaudeCredentials): void {
     })
     return
   }
+  if (hasApiKey && incomingIsRawKey) {
+    log("sync_auth_json_skipped", {
+      path: authPath,
+      reason: "existing_api_key_preserved",
+    })
+    return
+  }
 
-  auth.anthropic = {
-    type: "oauth",
-    access: creds.accessToken,
-    refresh: creds.refreshToken,
-    expires: creds.expiresAt,
+  if (incomingIsRawKey) {
+    // Raw `sk-ant-api03-...` console API keys must be sent as `x-api-key`,
+    // not as Bearer OAuth tokens. Writing them as `type: "oauth"` caused
+    // opencode's loader to use Bearer auth, which the Anthropic API
+    // rejects with 401 ("Invalid bearer token"). The same key works fine
+    // when sent as `x-api-key`, which is what `type: "api"` selects.
+    auth.anthropic = {
+      type: "api",
+      key: creds.accessToken,
+    }
+  } else {
+    auth.anthropic = {
+      type: "oauth",
+      access: creds.accessToken,
+      refresh: creds.refreshToken,
+      expires: creds.expiresAt,
+    }
   }
   const dir = dirname(authPath)
   if (!existsSync(dir)) {

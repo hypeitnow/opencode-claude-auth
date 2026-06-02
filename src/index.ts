@@ -299,6 +299,32 @@ const plugin: Plugin = async ({ client }: { client: any }) => {
       async loader(getAuth, provider) {
         const auth = await getAuth()
         log("auth_loader_called", { authType: auth.type })
+
+        // For raw `sk-ant-api03-...` console API keys, hand the key back to
+        // opencode as `apiKey` so it sends the standard `x-api-key` header.
+        // The Anthropic API rejects these keys when sent as Bearer OAuth
+        // tokens (the OAuth path that follows), so we must NOT route raw
+        // keys through our fetch wrapper. The `experimental.chat.system.transform`
+        // hook above still prepends the Claude Code identity to the system
+        // prompt, so the model still behaves as Claude Code.
+        if (
+          auth.type === "api" &&
+          typeof auth.key === "string" &&
+          auth.key.length > 0
+        ) {
+          log("auth_loader_pass_through_api_key", {
+            keyPrefix: auth.key.slice(0, 12),
+          })
+          for (const model of Object.values(provider.models)) {
+            model.cost = {
+              input: 0,
+              output: 0,
+              cache: { read: 0, write: 0 },
+            }
+          }
+          return { apiKey: auth.key }
+        }
+
         if (auth.type !== "oauth") {
           log("auth_loader_skipped", {
             authType: auth.type,

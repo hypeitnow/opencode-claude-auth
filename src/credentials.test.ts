@@ -675,6 +675,91 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
     }
   })
 
+  it("does not overwrite a type:api entry with a raw keychain value", async () => {
+    if (process.platform === "win32") return
+
+    const originalHome = process.env.HOME
+    const tempHome = await mkdtemp(
+      join(tmpdir(), "opencode-claude-auth-preserve-api-"),
+    )
+    process.env.HOME = tempHome
+
+    try {
+      // Pre-populate auth.json with a type:api entry (the user explicitly
+      // configured this via `opencode auth login` → Anthropic → API key, or
+      // it was written by a previous plugin run that knew what it was doing).
+      const authDir = join(tempHome, ".local", "share", "opencode")
+      mkdirSync(authDir, { recursive: true })
+      const authPath = join(authDir, "auth.json")
+      const existingApi = {
+        anthropic: {
+          type: "api",
+          key: "sk-ant-api03-user-set-key",
+        },
+      }
+      writeFileSync(authPath, JSON.stringify(existingApi), {
+        encoding: "utf-8",
+        mode: 0o600,
+      })
+
+      const tempDir = await mkdtemp(
+        join(tmpdir(), "opencode-claude-auth-preserve-api-sync-"),
+      )
+      const tempCredentials = join(tempDir, "credentials.ts")
+      const tempKeychain = join(tempDir, "keychain.ts")
+      const tempBetas = join(tempDir, "betas.ts")
+      const tempLogger = join(tempDir, "logger.ts")
+      const sourceCredentials = await readFile(
+        new URL("./credentials.ts", import.meta.url),
+        "utf8",
+      )
+      const rewritten = sourceCredentials.replace(
+        /from\s+["']\.\/(\w+)\.js["']/g,
+        'from "./$1.ts"',
+      )
+
+      await writeFile(
+        tempKeychain,
+        `export function readAllClaudeAccounts() { return [] }
+export function refreshAccount() { return null }
+export function writeBackCredentials() { return true }
+export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account \${i + 1}\`) }`,
+        "utf8",
+      )
+      await writeFile(
+        tempBetas,
+        `export function resetExcludedBetas() {}\n`,
+        "utf8",
+      )
+      await writeFile(
+        tempLogger,
+        `export function log() {}\nexport function initLogger() {}\nexport function closeLogger() {}\n`,
+        "utf8",
+      )
+      await writeFile(tempCredentials, rewritten, "utf8")
+
+      const mod = await import(pathToFileURL(tempCredentials).href)
+
+      // Plugin reads a different raw key from keychain. We must not
+      // clobber the user's existing type:api entry.
+      mod.syncAuthJson({
+        accessToken: "sk-ant-api03-keychain-value",
+        refreshToken: "",
+        expiresAt: Date.now() + 365 * 24 * 3600_000,
+      })
+
+      const after = JSON.parse(await readFile(authPath, "utf8"))
+      assert.equal(after.anthropic.type, "api")
+      assert.equal(after.anthropic.key, "sk-ant-api03-user-set-key")
+    } finally {
+      if (typeof originalHome === "string") {
+        process.env.HOME = originalHome
+      } else {
+        delete process.env.HOME
+      }
+    }
+  })
+
   it("still overwrites when incoming value is a real OAuth refresh", async () => {
     if (process.platform === "win32") return
 
@@ -807,7 +892,9 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
 
       const mod = await import(pathToFileURL(tempCredentials).href)
 
-      // First write: no existing entry, no refresh token. Should write.
+      // First write: no existing entry, no refresh token. Should write as
+      // type:"api" (raw `sk-ant-api03-...` console keys must be sent as
+      // x-api-key, not as Bearer OAuth tokens).
       mod.syncAuthJson({
         accessToken: "sk-ant-api03-raw",
         refreshToken: "",
@@ -822,8 +909,8 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
         "auth.json",
       )
       const after = JSON.parse(await readFile(authPath, "utf8"))
-      assert.equal(after.anthropic.access, "sk-ant-api03-raw")
-      assert.equal(after.anthropic.refresh, "")
+      assert.equal(after.anthropic.type, "api")
+      assert.equal(after.anthropic.key, "sk-ant-api03-raw")
     } finally {
       if (typeof originalHome === "string") {
         process.env.HOME = originalHome
