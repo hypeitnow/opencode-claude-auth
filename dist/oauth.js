@@ -63,7 +63,10 @@ function parseCallbackInput(input) {
 export async function exchangeCode(callback, verifier, redirectUri, expectedState) {
     if (expectedState && callback.state !== expectedState) {
         log("oauth_state_mismatch", { expected: expectedState, got: callback.state });
-        return { type: "failed" };
+        return {
+            type: "failed",
+            reason: `state mismatch: expected ${expectedState}, got ${callback.state}`,
+        };
     }
     let response;
     try {

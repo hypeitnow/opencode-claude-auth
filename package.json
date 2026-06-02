@@ -1,6 +1,6 @@
 {
   "name": "@hypeitnow/opencode-claude-auth",
-  "version": "1.6.7",
+  "version": "1.6.8",
   "description": "OpenCode plugin that uses your Claude Code credentials — no separate login needed. Fork with OAuth fallback for org-locked accounts.",
   "keywords": [
     "anthropic",

@@ -80,7 +80,10 @@ export async function exchangeCode(
 ): Promise<AuthResult> {
   if (expectedState && callback.state !== expectedState) {
     log("oauth_state_mismatch", { expected: expectedState, got: callback.state })
-    return { type: "failed" }
+    return {
+      type: "failed",
+      reason: `state mismatch: expected ${expectedState}, got ${callback.state}`,
+    }
   }
   let response: Response
   try {
