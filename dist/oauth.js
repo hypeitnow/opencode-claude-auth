@@ -105,7 +105,7 @@ export async function exchangeCode(callback, verifier, redirectUri, expectedStat
         }
         const reason = parsedError
             ? `HTTP ${response.status}: ${parsedError}`
-            : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`;
+            : `HTTP ${response.status} (body=${body.slice(0, 300) || "(empty)"})`;
         return { type: "failed", reason };
     }
     const json = (await response.json());
