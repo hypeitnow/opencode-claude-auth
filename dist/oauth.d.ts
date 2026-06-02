@@ -11,6 +11,7 @@ export type AuthResult = {
     expires: number;
 } | {
     type: "failed";
+    reason: string;
 };
 export declare function exchangeCode(callback: {
     code: string;

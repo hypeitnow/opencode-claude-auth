@@ -87,12 +87,23 @@ export async function exchangeCode(callback, verifier, redirectUri, expectedStat
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log("oauth_exchange_network_error", { error: message });
-        return { type: "failed" };
+        return { type: "failed", reason: `network error: ${message}` };
     }
     if (!response.ok) {
         const body = await response.text().catch(() => "");
         log("oauth_exchange_failed", { status: response.status, body });
-        return { type: "failed" };
+        let parsedError = null;
+        try {
+            const json = JSON.parse(body);
+            parsedError = json.error_description ?? json.error ?? null;
+        }
+        catch {
+            // body wasn't JSON
+        }
+        const reason = parsedError
+            ? `HTTP ${response.status}: ${parsedError}`
+            : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`;
+        return { type: "failed", reason };
     }
     const json = (await response.json());
     return {
@@ -127,7 +138,16 @@ export async function refreshTokens(refresh) {
     if (!response.ok) {
         const body = await response.text().catch(() => "");
         log("oauth_refresh_failed", { status: response.status, body });
-        return { type: "failed" };
+        let parsedError = null;
+        try {
+            const json = JSON.parse(body);
+            parsedError = json.error_description ?? json.error ?? null;
+        }
+        catch { }
+        const reason = parsedError
+            ? `HTTP ${response.status}: ${parsedError}`
+            : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`;
+        return { type: "failed", reason };
     }
     const json = (await response.json());
     return {

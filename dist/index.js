@@ -501,10 +501,10 @@ const plugin = async ({ client }) => {
                                 }
                                 const result = await exchangeCode(parsed, verifier, redirectUri, state);
                                 if (result.type === "failed") {
-                                    log("oauth_fallback_exchange_failed", {});
+                                    log("oauth_fallback_exchange_failed", { reason: result.reason });
                                     return {
                                         type: "failed",
-                                        error: "OAuth code exchange failed. The code may have expired or the state did not match.",
+                                        error: `OAuth code exchange failed: ${result.reason}. The code may have expired (single-use, ~30s lifetime) or the state did not match.`,
                                     };
                                 }
                                 log("oauth_fallback_exchange_success", {

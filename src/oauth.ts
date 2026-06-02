@@ -45,7 +45,7 @@ export type AuthResult =
       refresh: string
       expires: number
     }
-  | { type: "failed" }
+  | { type: "failed"; reason: string }
 
 function generateState(): string {
   return crypto.randomUUID().replace(/-/g, "")
@@ -103,12 +103,22 @@ export async function exchangeCode(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     log("oauth_exchange_network_error", { error: message })
-    return { type: "failed" }
+    return { type: "failed", reason: `network error: ${message}` }
   }
   if (!response.ok) {
     const body = await response.text().catch(() => "")
     log("oauth_exchange_failed", { status: response.status, body })
-    return { type: "failed" }
+    let parsedError: string | null = null
+    try {
+      const json = JSON.parse(body) as { error?: string; error_description?: string }
+      parsedError = json.error_description ?? json.error ?? null
+    } catch {
+      // body wasn't JSON
+    }
+    const reason = parsedError
+      ? `HTTP ${response.status}: ${parsedError}`
+      : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`
+    return { type: "failed", reason }
   }
   const json = (await response.json()) as {
     access_token: string
@@ -147,7 +157,15 @@ export async function refreshTokens(refresh: string): Promise<AuthResult> {
   if (!response.ok) {
     const body = await response.text().catch(() => "")
     log("oauth_refresh_failed", { status: response.status, body })
-    return { type: "failed" }
+    let parsedError: string | null = null
+    try {
+      const json = JSON.parse(body) as { error?: string; error_description?: string }
+      parsedError = json.error_description ?? json.error ?? null
+    } catch {}
+    const reason = parsedError
+      ? `HTTP ${response.status}: ${parsedError}`
+      : `HTTP ${response.status}: ${body.slice(0, 200) || "(empty body)"}`
+    return { type: "failed", reason }
   }
   const json = (await response.json()) as {
     access_token: string
