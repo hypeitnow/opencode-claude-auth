@@ -28,9 +28,15 @@ const OAUTH_SCOPES = [
   "org:create_api_key",
   "user:profile",
   "user:inference",
+  "user:developer",
+  "user:ccr_inference",
+  "user:voice",
   "user:sessions:claude_code",
   "user:mcp_servers",
   "user:file_upload",
+  "org:service_key_inference",
+  "workspace:developer",
+  "workspace:inference",
 ]
 
 export type AuthorizeMode = keyof typeof AUTHORIZE_URLS
