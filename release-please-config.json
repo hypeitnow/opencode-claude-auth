@@ -2,7 +2,7 @@
   "release-type": "node",
   "package-name": "@hypeitnow/opencode-claude-auth",
   "include-v-in-tag": true,
-  "version": "1.6.14",
+  "version": "1.7.0",
   "last-release-sha": "",
   "changelog-path": "CHANGELOG.md",
   "pull-request-header": "🤖 Release ${version}",
