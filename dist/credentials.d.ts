@@ -4,6 +4,12 @@ export type { ClaudeAccount } from "./keychain.ts";
 export declare function initAccounts(accounts: ClaudeAccount[]): void;
 export declare function getAccounts(): ClaudeAccount[];
 export declare function setActiveAccountSource(source: string): void;
+/**
+ * Drops every cached credential so the next getCachedCredentials() call
+ * re-reads from the account source instead of serving the 30s cache. Used
+ * when a token was just rejected (401) or is being refreshed.
+ */
+export declare function invalidateCredentialCache(): void;
 export declare function refreshAccountsList(): ClaudeAccount[];
 export declare function loadPersistedAccountSource(): string | null;
 export declare function saveAccountSource(source: string): void;

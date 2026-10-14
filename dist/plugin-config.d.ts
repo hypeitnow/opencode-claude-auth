@@ -35,6 +35,24 @@ export interface PluginSettings {
  */
 export declare function applyOpencodeConfig(config: unknown): void;
 /**
+ * Apply settings passed as OpenCode V2 plugin options, e.g.
+ *
+ * ```json
+ * {
+ *   "plugins": [
+ *     {
+ *       "package": "@hypeitnow/opencode-claude-auth",
+ *       "options": { "enable1mContext": true }
+ *     }
+ *   ]
+ * }
+ * ```
+ *
+ * Priority is unchanged: ANTHROPIC_ENABLE_1M_CONTEXT env var > plugin
+ * options > hardcoded default.
+ */
+export declare function applyPluginOptions(options: unknown): void;
+/**
  * Whether 1M context should be enabled.
  *
  * Priority: ANTHROPIC_ENABLE_1M_CONTEXT env var > opencode.json > false

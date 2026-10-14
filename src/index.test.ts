@@ -129,6 +129,8 @@ const SOURCE_FILES = [
   "logger.ts",
   "oauth.ts",
   "pkce.ts",
+  "request.ts",
+  "v2.ts",
 ] as const
 
 async function copySourceFiles(tempDir: string): Promise<void> {
@@ -658,7 +660,7 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
     })) as unknown as typeof setInterval
 
     try {
-      const plugin = await helpers.default({} as never)
+      const plugin = await helpers.ClaudeAuthPlugin({} as never)
       assert.equal(
         typeof plugin["experimental.chat.system.transform"],
         "function",
@@ -696,7 +698,7 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
     })) as unknown as typeof setInterval
 
     try {
-      const plugin = await helpers.default({} as never)
+      const plugin = await helpers.ClaudeAuthPlugin({} as never)
       const transform = plugin["experimental.chat.system.transform"] as (
         input: { model?: { providerID?: string } },
         output: { system: string[] },
@@ -740,7 +742,7 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
     globalThis.setInterval = (() => fakeTimer) as unknown as typeof setInterval
 
     try {
-      await helpers.default({} as never)
+      await helpers.ClaudeAuthPlugin({} as never)
       assert.ok(
         unrefCalled,
         "Expected .unref() to be called on the interval timer",
@@ -778,7 +780,7 @@ export function buildAccountLabels(creds) { return creds.map((_, i) => \`Account
         return new Response("ok")
       }) as typeof fetch
 
-      const plugin = await helpersModule.default({} as never)
+      const plugin = await helpersModule.ClaudeAuthPlugin({} as never)
       const typedPlugin = plugin as { auth?: { loader?: TestAuthLoader } }
       assert.equal(typeof typedPlugin.auth?.loader, "function")
       const authConfig = await typedPlugin.auth!.loader!(

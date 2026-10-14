@@ -24,6 +24,54 @@ keys. See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 Drop this into your `~/.config/opencode/opencode.json` (or project-level `opencode.json`). OpenCode installs the plugin on first run via Bun.
 
+## OpenCode V2
+
+This plugin works with **OpenCode 2.x** as well as OpenCode 1.x. OpenCode 2 has a
+new plugin API, so the package default-exports one object that carries both
+implementations: OpenCode 2 reads `id` + `setup()`, OpenCode 1 (≥ 1.18.29) calls
+`server()`. The two are independent and V1 hooks are not translated.
+
+```jsonc
+// ~/.config/opencode/opencode.jsonc  (OpenCode 2 uses "plugins")
+{
+  "plugins": [
+    "@hypeitnow/opencode-claude-auth@latest",
+    // or, with options:
+    // { "package": "@hypeitnow/opencode-claude-auth@latest",
+    //   "options": { "enable1mContext": true, "autoConnect": true } },
+  ],
+}
+```
+
+What it does under OpenCode 2:
+
+- Adds two login methods to the **Anthropic** integration: **Claude Code credentials**
+  (macOS Keychain or `~/.claude/.credentials.json`) and **Claude OAuth (fallback)**.
+  Choose one with `opencode auth login`.
+- On startup, if Anthropic has **no** connection yet and Claude Code credentials exist,
+  it connects **Claude Code credentials** automatically. It never replaces an existing
+  Anthropic connection. Set `"autoConnect": false` to disable this.
+- OpenCode stores and refreshes the credential; the plugin provides the refresh logic by
+  re-reading Claude Code's own store. `auth.json` is no longer written.
+- For the `anthropic` provider only: prepends the Claude Code identity to every system
+  prompt (chat, title, compaction), sends the Claude Code headers and billing header,
+  prefixes tool names on the way out and strips them from the stream on the way back, and
+  retries once on `401` (re-reading credentials) and on long-context beta errors.
+- Plain API keys (`x-api-key`) are left untouched, as in OpenCode 1.
+
+Differences from OpenCode 1:
+
+|                                         | OpenCode 1                        | OpenCode 2                                |
+| --------------------------------------- | --------------------------------- | ----------------------------------------- |
+| `enable1mContext` setting               | `agent.<name>.enable1mContext`    | plugin `options` (the env var still wins) |
+| Credential store                        | `auth.json`, synced by the plugin | OpenCode's own store                      |
+| `429`/`529` retries                     | the plugin wraps `fetch`          | OpenCode's built-in retry policy          |
+| `x-opencode-*` / `x-session-id` headers | not sent by OpenCode 1            | removed from Anthropic OAuth requests     |
+
+Requires OpenCode 2.x (verified against 2.0.29). Local plugin _directories_ are only
+discovered by OpenCode 2 when their entry file is named `index.js`; installing from npm
+(as above) is unaffected.
+
 ## 1.6.14 — what changed (read this if you upgraded from ≤1.6.13)
 
 The macOS `Claude Code` Keychain entry (used by `claude` CLI on machines where the user has a console API key) holds a raw `sk-ant-api03-...` string. Versions ≤1.6.13 wrote this value into OpenCode's `auth.json` as `type: "oauth"`, which made OpenCode's loader send it as `Authorization: Bearer`. Anthropic's API **rejects raw console keys sent as Bearer** (returns `401 Invalid bearer token`), but accepts the same key sent as `x-api-key`.
