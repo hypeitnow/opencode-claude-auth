@@ -48,6 +48,15 @@ export function setActiveAccountSource(source: string): void {
   }
 }
 
+/**
+ * Drops every cached credential so the next getCachedCredentials() call
+ * re-reads from the account source instead of serving the 30s cache. Used
+ * when a token was just rejected (401) or is being refreshed.
+ */
+export function invalidateCredentialCache(): void {
+  accountCacheMap.clear()
+}
+
 export function refreshAccountsList(): ClaudeAccount[] {
   allAccounts = readAllClaudeAccounts()
   return allAccounts

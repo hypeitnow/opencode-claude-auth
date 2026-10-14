@@ -5,10 +5,13 @@ export { stripToolPrefix, transformBody, transformResponseStream, } from "./tran
 export { getCachedCredentials, syncAuthJson, refreshAccountsList, type ClaudeCredentials, } from "./credentials.ts";
 export { isEnable1mContext, type PluginSettings } from "./plugin-config.ts";
 export { buildBillingHeaderValue, computeCch, computeVersionSuffix, extractFirstUserMessageText, } from "./signing.ts";
-type FetchFn = typeof fetch;
-export declare function fetchWithRetry(input: RequestInfo | URL, init?: RequestInit, retries?: number, fetchImpl?: FetchFn): Promise<Response>;
-export declare function buildRequestHeaders(input: RequestInfo | URL, init: RequestInit, accessToken: string, modelId?: string, excludedBetas?: Set<string>): Headers;
-declare const plugin: Plugin;
+export { buildRequestHeaders, fetchWithRetry } from "./request.ts";
+export { createClaudeAuthV2 } from "./v2.ts";
 export declare const ClaudeAuthPlugin: Plugin;
-export default plugin;
+declare const _default: {
+    server: Plugin;
+    id: string;
+    setup: (context: import("./v2-types.ts").V2Context) => Promise<import("./v2-types.ts").V2Cleanup | void>;
+};
+export default _default;
 //# sourceMappingURL=index.d.ts.map

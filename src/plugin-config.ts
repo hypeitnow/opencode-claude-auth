@@ -77,6 +77,42 @@ export function applyOpencodeConfig(config: unknown): void {
 }
 
 /**
+ * Apply settings passed as OpenCode V2 plugin options, e.g.
+ *
+ * ```json
+ * {
+ *   "plugins": [
+ *     {
+ *       "package": "@hypeitnow/opencode-claude-auth",
+ *       "options": { "enable1mContext": true }
+ *     }
+ *   ]
+ * }
+ * ```
+ *
+ * Priority is unchanged: ANTHROPIC_ENABLE_1M_CONTEXT env var > plugin
+ * options > hardcoded default.
+ */
+export function applyPluginOptions(options: unknown): void {
+  if (!options || typeof options !== "object") return
+
+  const val = (options as Record<string, unknown>).enable1mContext
+  if (typeof val === "boolean") {
+    settings.enable1mContext = val
+    log("config_loaded", { enable1mContext: val, source: "plugin_options" })
+    return
+  }
+
+  if (val !== undefined) {
+    log("config_invalid_type", {
+      key: "enable1mContext",
+      expectedType: "boolean",
+      actualType: typeof val,
+    })
+  }
+}
+
+/**
  * Whether 1M context should be enabled.
  *
  * Priority: ANTHROPIC_ENABLE_1M_CONTEXT env var > opencode.json > false
